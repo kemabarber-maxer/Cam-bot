@@ -15,7 +15,7 @@ from datetime import datetime
 # ==================== AYARLAR ====================
 TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL", "")
-PORT = int(os.environ.get("PORT", 5000))
+PORT = int(os.environ.get("PORT", 8080))
 
 if not TOKEN:
     raise ValueError("BOT_TOKEN çevre değişkeni ayarlanmamış!")
