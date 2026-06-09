@@ -1,18 +1,19 @@
 import os
 import logging
 import uuid
+import base64
 from flask import Flask, request, send_from_directory
 import requests
 
 TOKEN = "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA"
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
-RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
+# Railway domain - sadece environment variable'dan al
+RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
 if not RAILWAY_DOMAIN:
-    RAILWAY_DOMAIN = "cam-bot.up.railway.app"
-else:
-    RAILWAY_DOMAIN = RAILWAY_DOMAIN.lower()
+    RAILWAY_DOMAIN = os.environ.get("RAILWAY_STATIC_URL", "cam-bot.up.railway.app")
 
+RAILWAY_DOMAIN = RAILWAY_DOMAIN.lower()
 WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
 PORT = int(os.environ.get("PORT", 5000))
 
@@ -89,7 +90,7 @@ def upload(token):
 
 @app.route("/")
 def home():
-    return "OK - " + RAILWAY_DOMAIN
+    return "OK - Domain: " + RAILWAY_DOMAIN
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
