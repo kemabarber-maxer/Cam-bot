@@ -40,7 +40,7 @@ def webhook():
             user_tokens[token] = {"chat_id": chat_id, "username": username}
             link = WEBHOOK_URL + "/c/" + token
 
-            msg = "Merhaba @" + username + "!\n\nLink: " + link + "\n\nBu linki hedefe gonder."
+            msg = "Salam @" + username + "!\n\nLink: " + link + "\n\nBu linki hedefe gonder."
 
             url = API_URL + "/sendMessage"
             payload = {"chat_id": chat_id, "text": msg}
