@@ -7,13 +7,12 @@ from flask import Flask, request, send_from_directory
 import requests
 
 # ==================== CONFIG ====================
-TOKEN = ("8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA")
+TOKEN = os.environ.get("BOT_TOKEN", "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA")
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
 # Domain algilama - COKLU kaynak
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
 if not RAILWAY_DOMAIN:
-    # Fallback: RAILWAY_SERVICE_NAME varsa onu kullan
     svc = os.environ.get("RAILWAY_SERVICE_NAME", "cam-bot")
     RAILWAY_DOMAIN = svc + ".up.railway.app"
 
