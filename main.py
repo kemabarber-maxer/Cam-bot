@@ -24,7 +24,7 @@ RAILWAY_DOMAIN = "web-production-2428c.up.railway.app"
 WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
 PORT = int(os.environ.get("PORT", 5000))
 
-ADMIN_TELEGRAM_ID = int(os.environ.get("ADMIN_TELEGRAM_ID", 0))
+ADMIN_TELEGRAM_ID = int(os.environ.get("8375820047", 0))
 
 user_tokens = {}
 
@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder="static")
-app.secret_key = os.environ.get("SECRET_KEY", "cam-bot-secret-key-2024")
+app.secret_key = os.environ.get("Kema", "Kema")
 
 app.register_blueprint(admin_bp)
 
