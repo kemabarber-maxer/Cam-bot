@@ -1,151 +1,460 @@
-# DÜZELTİLMİŞ bot.py - Railway uyumlu
-bot_code = '''import os
-import logging
-import uuid
 import asyncio
-from flask import Flask, request, send_from_directory
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
+import logging
+import os
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.filters import CommandStart, Command
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
+from dotenv import load_dotenv
+from database import *
 
-# ==================== CONFIG ====================
-TOKEN = os.environ.get("BOT_TOKEN", "8845469880:AAEEENGVv_igk7_DzrgMdK2UGG9Dnzva8VY")
+load_dotenv()
 
-# Railway domain - RAILWAY_PUBLIC_DOMAIN veya RAILWAY_STATIC_URL
-RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
-if RAILWAY_DOMAIN:
-    WEBHOOK_URL = f"https://{RAILWAY_DOMAIN}"
-else:
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://your-app.up.railway.app")
-
-PORT = int(os.environ.get("PORT", 5000))
-
-# Kullanıcı ID -> Token eşleşmesi
-user_tokens = {}
-
-# ==================== LOGGING ====================
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# ==================== FLASK APP ====================
-app = Flask(__name__, static_folder='static')
+bot = Bot(token=os.getenv("BOT_TOKEN"))
+dp = Dispatcher()
+router = Router()
 
-# ==================== TELEGRAM BOT ====================
-bot_app = Application.builder().token(TOKEN).build()
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+MIN_POINTS = int(os.getenv("MIN_POINTS_FOR_PRIZE", "100"))
+REF_BONUS = int(os.getenv("REFERRAL_BONUS", "50"))
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    username = update.effective_user.username or "Bilinmiyor"
+# === MENYULAR ===
+def main_menu():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📢 Kanala abuna bol", callback_data="channels")
+    builder.button(text="👤 Profilim", callback_data="profile")
+    builder.button(text="🏆 Liderler", callback_data="leaderboard")
+    builder.button(text="🎁 Uç alyş", callback_data="prizes")
+    builder.button(text="🔗 Referal çagyrmak", callback_data="referral")
+    builder.adjust(2, 2, 1)
+    return builder.as_markup()
+
+def back_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Yza", callback_data="main_menu")]
+    ])
+
+# === START ===
+@router.message(CommandStart())
+async def cmd_start(message: Message, command: CommandStart):
+    user_id = message.from_user.id
+    args = command.args
     
-    # Her kullanıcıya özel benzersiz token
-    token = str(uuid.uuid4()).replace("-", "")[:16]
-    user_tokens[token] = {
-        "user_id": user_id,
-        "username": username,
-        "chat_id": update.effective_chat.id
-    }
+    user = get_user(user_id)
     
-    link = f"{WEBHOOK_URL}/c/{token}"
+    if not user:
+        referred_by = int(args) if args and args.isdigit() else None
+        add_user(
+            user_id=user_id,
+            username=message.from_user.username,
+            full_name=message.from_user.full_name,
+            referred_by=referred_by
+        )
+        if referred_by and referred_by != user_id:
+            try:
+                await bot.send_message(
+                    referred_by, 
+                    f"🎉 {message.from_user.full_name} siziň referalyňyz boldy! +{REF_BONUS} bal!"
+                )
+            except:
+                pass
     
-    keyboard = [[InlineKeyboardButton("📸 Linke Git", url=link)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        f"👋 Merhaba @{username}!\\n\\n"
-        f"📎 **Özel Linkiniz:**\\n`{link}`\\n\\n"
-        f"🔗 Bu linki hedefe gönderin.\\n"
-        f"📱 Hedef linke tıklayınca kamera otomatik açılır!\\n"
-        f"📸 Fotoğraf çekilip size anında gönderilir.",
-        parse_mode="Markdown",
-        reply_markup=reply_markup
+    await message.answer(
+        f"🎮 **Uç Gazan Botuna hoş geldiňiz!**\n\n"
+        f"📢 Kanallara abuna bolup bal gazanyň\n"
+        f"🔗 Referal arkaly dost çagyryp has köp bal\n"
+        f"🎁 {MIN_POINTS} bal ýygnap uç alyň!",
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
     )
 
-bot_app.add_handler(CommandHandler("start", start))
+# === KANALLAR ===
+@router.callback_query(F.data == "channels")
+async def show_channels(callback):
+    user_id = callback.from_user.id
+    channels = get_channels(user_id)
+    
+    if not channels:
+        await callback.message.edit_text(
+            "Häzirlikçe tapşyrk ýok. Admin kanal goşar! ⏳",
+            reply_markup=back_menu()
+        )
+        return
+    
+    builder = InlineKeyboardBuilder()
+    
+    for channel_id, name, points, completed in channels:
+        status = " ✅" if completed else ""
+        clean_id = channel_id.replace("@", "")
+        
+        if not completed:
+            builder.button(
+                text=f"📢 {name} (+{points} bal)",
+                url=f"https://t.me/{clean_id}"
+            )
+            builder.button(
+                text=f"✓ Barla",
+                callback_data=f"check_{channel_id}"
+            )
+        else:
+            builder.button(
+                text=f"📢 {name} (+{points} bal){status}",
+                callback_data="done"
+            )
+    
+    builder.button(text="🔄 Täzele", callback_data="channels")
+    builder.button(text="⬅️ Yza", callback_data="main_menu")
+    builder.adjust(2, 2, 2, 1)
+    
+    await callback.message.edit_text(
+        "📢 **Kanallara abuna bolup bal gazanyň**\n\n"
+        "1. Kanala basyp abuna boluň\n"
+        "2. Yza dönüp '✓ Barla' basyň\n"
+        "3. Bal gazanyň! 🎉",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
+    )
 
-# ==================== WEBHOOK HANDLER ====================
-@app.route(f"/{TOKEN}", methods=["POST"])
-def telegram_webhook():
-    update = Update.de_json(request.get_json(), bot_app.bot)
-    asyncio.run(bot_app.process_update(update))
-    return "OK", 200
-
-# ==================== SERVE HTML PAGE ====================
-@app.route("/c/<token>")
-def capture_page(token):
-    if token not in user_tokens:
-        return "<h1>Link geçersiz veya süresi dolmuş!</h1>", 404
-    return send_from_directory("static", "capture.html")
-
-# ==================== RECEIVE PHOTO FROM FRONTEND ====================
-@app.route("/upload/<token>", methods=["POST"])
-def upload_photo(token):
-    if token not in user_tokens:
-        return {"error": "Invalid token"}, 403
+# === KANAL BARLAMA ===
+@router.callback_query(F.data.startswith("check_"))
+async def check_subscription(callback):
+    channel_id = callback.data.replace("check_", "")
+    user_id = callback.from_user.id
     
-    data = request.get_json()
-    image_data = data.get("image", "")
-    
-    if not image_data:
-        return {"error": "No image data"}, 400
-    
-    user_info = user_tokens[token]
-    chat_id = user_info["chat_id"]
-    username = user_info["username"]
-    
-    import base64
     try:
-        image_bytes = base64.b64decode(image_data.split(",")[1])
+        # ULANYJYNYŇ KANALDAKY STATUSYNY BARLA
+        member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+        
+        # Abuna bolanmy?
+        if member.status in ["member", "administrator", "creator"]:
+            import sqlite3
+            conn = sqlite3.connect("bot.db")
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT points FROM channels WHERE channel_id = ?", 
+                (channel_id,)
+            )
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                points = result[0]
+                if complete_channel_task(user_id, channel_id, points):
+                    await callback.answer(
+                        f"🎉 Gutlaýarys! +{points} bal gazandyňyz!", 
+                        show_alert=True
+                    )
+                    await show_channels(callback)
+                else:
+                    await callback.answer(
+                        "Bu kanal eýýäm barlanan!", 
+                        show_alert=True
+                    )
+            else:
+                await callback.answer("Kanal tapylmady!", show_alert=True)
+        else:
+            await callback.answer(
+                "❌ Siz bu kanala abuna däl!\nKanala abuna bolup täzeden barlaň.", 
+                show_alert=True
+            )
+            
+    except TelegramBadRequest as e:
+        await callback.answer(
+            "Kanal tapylmady ýa-da bot kanala admin däl!", 
+            show_alert=True
+        )
+    except Exception as e:
+        await callback.answer(
+            "Ýalňyşlyk ýüze çykdy. Soňra synanyşyň.", 
+            show_alert=True
+        )
+
+@router.callback_query(F.data == "done")
+async def already_done(callback):
+    await callback.answer("Bu kanal eýýäm ýerine ýetirilen!", show_alert=True)
+
+# === PROFIL ===
+@router.callback_query(F.data == "profile")
+async def show_profile(callback):
+    user_id = callback.from_user.id
+    user = get_user(user_id)
+    
+    if not user:
+        await callback.answer("Ýalňyşlyk!", show_alert=True)
+        return
+    
+    _, username, full_name, points, referrals, referred_by, tasks_completed, created_at = user
+    remaining = max(0, MIN_POINTS - points)
+    can_claim = "✅ Uç alyp bilersiňiz!" if points >= MIN_POINTS else f"❌ Galarak: {remaining} bal"
+    
+    await callback.message.edit_text(
+        f"👤 **Profilim**\n\n"
+        f"📛 Ady: {full_name}\n"
+        f"💰 Bal: **{points}**\n"
+        f"👥 Referallar: {referrals}\n"
+        f"✅ Ýerine ýetirilen: {tasks_completed}\n\n"
+        f"🎯 {can_claim}",
+        reply_markup=back_menu(),
+        parse_mode="Markdown"
+    )
+
+# === LIDERLER ===
+@router.callback_query(F.data == "leaderboard")
+async def show_leaderboard(callback):
+    leaders = get_leaderboard()
+    
+    text = "🏆 **Top 10 Liderler:**\n\n"
+    for i, (name, points, refs) in enumerate(leaders, 1):
+        medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
+        text += f"{medal} {name}: {points} bal ({refs} ref)\n"
+    
+    await callback.message.edit_text(text, reply_markup=back_menu(), parse_mode="Markdown")
+
+# === REFERRAL ===
+@router.callback_query(F.data == "referral")
+async def show_referral(callback):
+    user_id = callback.from_user.id
+    bot_info = await bot.get_me()
+    link = f"https://t.me/{bot_info.username}?start={user_id}"
+    user = get_user(user_id)
+    refs = user[4] if user else 0
+    
+    await callback.message.edit_text(
+        f"🔗 **Referal çagyrmak**\n\n"
+        f"Linki kopýalaň:\n`{link}`\n\n"
+        f"💰 Her täze ulanyjy: +{REF_BONUS} bal\n"
+        f"👥 Siziň referallaryňyz: {refs}",
+        reply_markup=back_menu(),
+        parse_mode="Markdown"
+    )
+
+# === UÇ ALIŞ ===
+@router.callback_query(F.data == "prizes")
+async def show_prizes(callback):
+    user_id = callback.from_user.id
+    user = get_user(user_id)
+    points = user[3] if user else 0
+    
+    builder = InlineKeyboardBuilder()
+    
+    if points >= MIN_POINTS:
+        builder.button(text=f"🎁 {MIN_POINTS} bal - Uç", callback_data=f"claim_{MIN_POINTS}")
+    if points >= MIN_POINTS * 2:
+        builder.button(text=f"🎁 {MIN_POINTS*2} bal - 2x Uç", callback_data=f"claim_{MIN_POINTS*2}")
+    
+    builder.button(text="⬅️ Yza", callback_data="main_menu")
+    builder.adjust(1)
+    
+    can_claim = "✅ Uç alyp bilersiňiz!" if points >= MIN_POINTS else f"❌ Gerek: {MIN_POINTS - points} bal"
+    
+    await callback.message.edit_text(
+        f"🎁 **Uç alyş**\n\n"
+        f"💰 Siziň balyňyz: {points}\n"
+        f"📍 Minimum: {MIN_POINTS} bal\n\n"
+        f"{can_claim}",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
+    )
+
+@router.callback_query(F.data.startswith("claim_"))
+async def claim_prize(callback):
+    points = int(callback.data.split("_")[-1])
+    user_id = callback.from_user.id
+    
+    if request_prize(user_id, points):
+        user = get_user(user_id)
+        new_points = user[3] if user else 0
+        
+        await callback.message.edit_text(
+            f"✅ **Uç alyş üstünlikli!**\n\n"
+            f"💰 Ulanan bal: {points}\n"
+            f"📊 Galan bal: {new_points}\n"
+            f"⏳ Admin tassyklamak üçin habar iberildi.",
+            reply_markup=back_menu()
+        )
+        
+        await bot.send_message(
+            ADMIN_ID,
+            f"🎁 **Täze uç alyş!**\n\n"
+            f"👤 {callback.from_user.full_name}\n"
+            f"🆔 ID: `{user_id}`\n"
+            f"💰 {points} bal\n"
+            f"✅ /confirm_{user_id} | ❌ /reject_{user_id}",
+            parse_mode="Markdown"
+        )
+    else:
+        await callback.answer("Ýeterlik bal ýok!", show_alert=True)
+
+# === ADMIN ===
+@router.message(Command("admin"))
+async def admin_panel(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    import sqlite3
+    conn = sqlite3.connect("bot.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*), SUM(points), SUM(referrals) FROM users")
+    total_users, total_points, total_refs = cursor.fetchone()
+    cursor.execute("SELECT COUNT(*) FROM prizes WHERE status = 'pending'")
+    pending = cursor.fetchone()[0]
+    conn.close()
+    
+    await message.answer(
+        f"🔧 **Admin Panel**\n\n"
+        f"👥 Ulanyjy: {total_users or 0}\n"
+        f"💰 Jemi bal: {total_points or 0}\n"
+        f"🔗 Referal: {total_refs or 0}\n"
+        f"⏳ Garaşylýan uç: {pending or 0}\n\n"
+        f"/addchannel @kanal 'Ady' bal\n"
+        f"/pending - Garaşylýanlar\n"
+        f"/confirm_ID - Tassykla\n"
+        f"/reject_ID - Ret et"
+    )
+
+@router.message(Command("addchannel"))
+async def add_channel_cmd(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    args = message.text.split()
+    if len(args) < 4:
+        await message.answer("Ulanylyş: /addchannel @kanal 'Kanal ady' 20")
+        return
+    
+    channel_id = args[1]
+    points = int(args[-1])
+    name = " ".join(args[2:-1]).strip("'\"")
+    
+    add_channel(channel_id, name, points)
+    await message.answer(f"✅ {channel_id} goşuldy! ({points} bal)")
+
+@router.message(Command("pending"))
+async def pending_prizes(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    import sqlite3
+    conn = sqlite3.connect("bot.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT p.user_id, u.full_name, p.points_used 
+        FROM prizes p
+        JOIN users u ON p.user_id = u.user_id
+        WHERE p.status = 'pending'
+    ''')
+    pending = cursor.fetchall()
+    conn.close()
+    
+    if not pending:
+        await message.answer("Garaşylýan uç ýok!")
+        return
+    
+    text = "⏳ **Garaşylýan uçlar:**\n\n"
+    for user_id, name, points in pending:
+        text += f"👤 {name} (ID: {user_id}) - {points} bal\n"
+        text += f"✅ /confirm_{user_id} | ❌ /reject_{user_id}\n\n"
+    
+    await message.answer(text, parse_mode="Markdown")
+
+@router.message(Command("confirm"))
+async def confirm_prize(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    args = message.text.split("_")
+    if len(args) < 2:
+        await message.answer("Ulanylyş: /confirm_123456")
+        return
+    
+    user_id = int(args[1])
+    
+    import sqlite3
+    conn = sqlite3.connect("bot.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE prizes SET status = 'confirmed' WHERE user_id = ? AND status = 'pending'",
+        (user_id,)
+    )
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"✅ Ulanyjy {user_id} üçin uç tassyklandy!")
+    
+    try:
+        await bot.send_message(
+            user_id,
+            "🎉 **Tebrikler!**\n\nUç alyşyňyz tassyklandy!\nUç gysga wagtda iberiler."
+        )
     except:
-        return {"error": "Invalid image data"}, 400
+        pass
+
+@router.message(Command("reject"))
+async def reject_prize(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
     
-    async def send_photo():
-        await bot_app.bot.send_photo(
-            chat_id=chat_id,
-            photo=image_bytes,
-            caption=f"📸 **Yeni Fotoğraf!**\\n\\n"
-                    f"👤 Kullanıcı: @{username}\\n"
-                    f"🔗 Token: `{token}`",
-            parse_mode="Markdown"
+    args = message.text.split("_")
+    if len(args) < 2:
+        await message.answer("Ulanylyş: /reject_123456")
+        return
+    
+    user_id = int(args[1])
+    
+    import sqlite3
+    conn = sqlite3.connect("bot.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT points_used FROM prizes WHERE user_id = ? AND status = 'pending'",
+        (user_id,)
+    )
+    result = cursor.fetchone()
+    
+    if result:
+        points = result[0]
+        cursor.execute(
+            "UPDATE prizes SET status = 'rejected' WHERE user_id = ? AND status = 'pending'",
+            (user_id,)
         )
-    
-    asyncio.run(send_photo())
-    return {"success": True}, 200
-
-# ==================== RECEIVE VIDEO ====================
-@app.route("/upload_video/<token>", methods=["POST"])
-def upload_video(token):
-    if token not in user_tokens:
-        return {"error": "Invalid token"}, 403
-    
-    video_file = request.files.get("video")
-    if not video_file:
-        return {"error": "No video"}, 400
-    
-    user_info = user_tokens[token]
-    chat_id = user_info["chat_id"]
-    username = user_info["username"]
-    
-    async def send_video():
-        await bot_app.bot.send_video(
-            chat_id=chat_id,
-            video=video_file.read(),
-            caption=f"🎥 **Yeni Video!**\\n\\n👤 Kullanıcı: @{username}",
-            parse_mode="Markdown"
+        cursor.execute(
+            "UPDATE users SET points = points + ? WHERE user_id = ?",
+            (points, user_id)
         )
+        conn.commit()
+        await message.answer(f"❌ Ret edildi. Bal yzyna gaýtaryldy.")
+        
+        try:
+            await bot.send_message(
+                user_id,
+                f"❌ Uç alyşyňyz ret edildi.\n💰 {points} bal yzyna gaýtaryldy."
+            )
+        except:
+            pass
+    else:
+        await message.answer("Garaşylýan uç tapylmady!")
     
-    asyncio.run(send_video())
-    return {"success": True}, 200
+    conn.close()
 
-# ==================== HOME ====================
-@app.route("/")
-def home():
-    return "✅ Bot Aktif!"
+# === YZYA ===
+@router.callback_query(F.data == "main_menu")
+async def back_to_main(callback):
+    await callback.message.edit_text(
+        f"🎮 **Uç Gazan Botuna hoş geldiňiz!**\n\n"
+        f"📢 Kanallara abuna bolup bal gazanyň\n"
+        f"🔗 Referal arkaly has köp bal\n"
+        f"🎁 {MIN_POINTS} bal ýygnap uç alyň!",
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
+    )
 
-# ==================== MAIN ====================
+# === ISLEMEK ===
+async def main():
+    init_db()
+    dp.include_router(router)
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
-'''
-
-with open("/mnt/agents/output/bot.py", "w") as f:
-    f.write(bot_code)
-
-print("✅ bot.py düzeltildi")
+    asyncio.run(main())
