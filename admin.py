@@ -1,25 +1,22 @@
 import os
-import base64
-from flask import Blueprint, render_template_string, request, redirect, session, flash
+from flask import Blueprint, render_template_string, request, redirect, session
 from database import (
     get_all_users, get_all_photos, get_user_by_id, add_credits,
-    log_admin_action, get_admin_logs, get_db
+    log_admin_action, get_admin_logs
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
-# Admin Telegram ID - @KEMA_VPN
-ADMIN_TELEGRAM_ID = int(os.environ.get("8375820047", 0))
+ADMIN_TELEGRAM_ID = int(os.environ.get("ADMIN_TELEGRAM_ID", "0"))
 
 def is_admin():
     return session.get("admin") == True
 
-# ========== LOGIN ==========
 @admin_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         pw = request.form.get("password", "")
-        if pw == os.environ.get("ADMIN_PASSWORD", "admin123"):
+        if pw == os.environ.get("ADMIN_PASSWORD", "Kema"):
             session["admin"] = True
             return redirect("/admin")
         return "Hatali sifre", 401
@@ -37,7 +34,6 @@ def login():
     </html>
     """
 
-# ========== DASHBOARD ==========
 @admin_bp.route("/")
 def dashboard():
     if not is_admin():
@@ -71,7 +67,6 @@ def dashboard():
             th { background:#252550; color:#00ff88; }
             tr:hover { background:#252550; }
             .btn { padding:5px 15px; background:#00ff88; color:#000; border:none; border-radius:5px; cursor:pointer; }
-            .btn-red { background:#ff4444; color:#fff; }
             .photo-thumb { max-width:100px; max-height:100px; border-radius:5px; }
             .nav { display:flex; justify-content:center; gap:20px; padding:20px; }
             .nav a { color:#00ff88; text-decoration:none; font-size:18px; }
@@ -90,22 +85,11 @@ def dashboard():
                 <a href="/admin/logout">Cikis</a>
             </div>
         </div>
-
         <div class="stats">
-            <div class="stat-box">
-                <h3>{{total_users}}</h3>
-                <p>Toplam Kullanici</p>
-            </div>
-            <div class="stat-box">
-                <h3>{{total_photos}}</h3>
-                <p>Toplam Fotograf</p>
-            </div>
-            <div class="stat-box">
-                <h3>{{total_credits}}</h3>
-                <p>Toplam Kredi</p>
-            </div>
+            <div class="stat-box"><h3>{{total_users}}</h3><p>Toplam Kullanici</p></div>
+            <div class="stat-box"><h3>{{total_photos}}</h3><p>Toplam Fotograf</p></div>
+            <div class="stat-box"><h3>{{total_credits}}</h3><p>Toplam Kredi</p></div>
         </div>
-
         <div class="section" id="users">
             <h2>Kullanicilar</h2>
             <table>
@@ -128,7 +112,6 @@ def dashboard():
                 {% endfor %}
             </table>
         </div>
-
         <div class="section" id="photos">
             <h2>Son Fotograflar</h2>
             <table>
@@ -144,7 +127,6 @@ def dashboard():
                 {% endfor %}
             </table>
         </div>
-
         <div class="section" id="logs">
             <h2>Admin Loglari</h2>
             <table>
@@ -170,23 +152,18 @@ def dashboard():
                                    total_users=total_users, total_photos=total_photos,
                                    total_credits=total_credits)
 
-# ========== ADD CREDIT ==========
 @admin_bp.route("/add_credit", methods=["POST"])
 def add_credit():
     if not is_admin():
         return redirect("/admin/login")
-
     user_id = int(request.form.get("user_id", 0))
     amount = int(request.form.get("amount", 0))
-
     user = get_user_by_id(user_id)
     if user:
         add_credits(user_id, amount)
         log_admin_action(ADMIN_TELEGRAM_ID, user_id, "ADD_CREDIT", amount)
-
     return redirect("/admin#users")
 
-# ========== LOGOUT ==========
 @admin_bp.route("/logout")
 def logout():
     session.clear()
