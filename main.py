@@ -7,10 +7,10 @@ from flask import Flask, request, send_from_directory
 import requests
 
 # ==================== CONFIG ====================
-TOKEN = os.environ.get("BOT_TOKEN", "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA")
+TOKEN = "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA"
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
-# Domain algilama - KUCUK HARFE CEVIR
+# Domain algilama
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
 if not RAILWAY_DOMAIN:
     svc = os.environ.get("RAILWAY_SERVICE_NAME", "cam-bot")
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder="static")
 
-logger.info("BOT_TOKEN: " + TOKEN[:10] + "...")
+logger.info("TOKEN: " + TOKEN[:10] + "...")
 logger.info("RAILWAY_DOMAIN: " + RAILWAY_DOMAIN)
 logger.info("WEBHOOK_URL: " + WEBHOOK_URL)
 logger.info("PORT: " + str(PORT))
@@ -162,7 +162,7 @@ def upload_video(token):
 
 @app.route("/")
 def home():
-    return "Bot Aktif! Domain: " + RAILWAY_DOMAIN
+    return "Bot Aktif! Domain: " + RAILWAY_DOMAIN + " | Token: " + TOKEN[:10] + "..."
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
