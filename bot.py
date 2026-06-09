@@ -1,4 +1,3 @@
-
 # DÜZELTİLMİŞ bot.py - Railway uyumlu
 bot_code = '''import os
 import logging
