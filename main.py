@@ -10,11 +10,13 @@ import requests
 TOKEN = os.environ.get("BOT_TOKEN", "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA")
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
-# Domain algilama - COKLU kaynak
+# Domain algilama - KUCUK HARFE CEVIR
 RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
 if not RAILWAY_DOMAIN:
     svc = os.environ.get("RAILWAY_SERVICE_NAME", "cam-bot")
-    RAILWAY_DOMAIN = svc + ".up.railway.app"
+    RAILWAY_DOMAIN = svc.lower() + ".up.railway.app"
+else:
+    RAILWAY_DOMAIN = RAILWAY_DOMAIN.lower()
 
 WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
 PORT = int(os.environ.get("PORT", 5000))
