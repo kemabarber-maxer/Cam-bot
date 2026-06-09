@@ -7,7 +7,7 @@ from flask import Flask, request, send_from_directory
 import requests
 
 # ==================== CONFIG ====================
-TOKEN = os.environ.get("BOT_TOKEN", "8845469880:AAEEENGVv_igk7_DzrgMdK2UGG9Dnzva8VY")
+TOKEN = ("8890650354:AAHG_DYLxeIsZMdTxZneIK7ZzbaOJlGsvyA")
 API_URL = "https://api.telegram.org/bot" + TOKEN
 
 # Domain algilama - COKLU kaynak
